@@ -1,4 +1,4 @@
-# Multimodal Product Price Prediction
+
 ## Problem Statement
 
 Determining the optimal price of a product is a critical task for e-commerce platforms. Product pricing depends on multiple factors including textual descriptions, specifications, quantity, and visual appearance.
