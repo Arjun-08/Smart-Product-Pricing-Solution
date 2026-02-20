@@ -1,181 +1,320 @@
 
+
+> A multimodal machine learning pipeline that predicts e-commerce product prices using catalog text and product images.
+
+---
+
 ## Problem Statement
 
-Determining the optimal price of a product is a critical task for e-commerce platforms. Product pricing depends on multiple factors including textual descriptions, specifications, quantity, and visual appearance.
+Determining the optimal price of a product is a critical task for e-commerce platforms. Product pricing depends on multiple factors including textual descriptions, specifications, quantity, and visual appearance. The objective of this project is to build a **multimodal machine learning model** that predicts product prices using:
 
-The objective of this project is to build a **multimodal machine learning model** that predicts the price of a product using both:
+- **Catalog content (text)**
+- **Product images**
 
--  Catalog content (text)
--  Product images
+---
 
-### Evaluation Metric
+## Evaluation Metric
 
-The model is evaluated using **Symmetric Mean Absolute Percentage Error (SMAPE)**.  
-Lower SMAPE values indicate better performance.
+The model is evaluated using **Symmetric Mean Absolute Percentage Error (SMAPE)**:
+
+$$SMAPE = \frac{1}{n}\sum \frac{|y_{pred}-y_{true}|}{(|y_{true}|+|y_{pred}|)/2}$$
+
+- Bounded between **0% and 200%**
+- Lower SMAPE indicates better performance
+- Robust to scale differences and price outliers
 
 ---
 
 ## Dataset Description
 
-The dataset consists of structured CSV files containing product metadata and images.
+The dataset contains structured product metadata and image links.
 
 ### Columns
 
-| Column Name        | Description |
+| Column Name | Description |
 |--------------------|-------------|
-| `sample_id`        | Unique identifier for each product |
-| `catalog_content` | Product title, description, and Item Pack Quantity (IPQ) |
-| `image_link`       | Public URL of the product image |
-| `price`            | Target variable (training data only) |
+| `sample_id` | Unique product identifier |
+| `catalog_content` | Title + description + Item Pack Quantity (IPQ) |
+| `image_link` | Public URL of the product image |
+| `price` | Target variable (train only) |
 
 ### Files
 
-- `train.csv` — 75,000 labeled products  
-- `test.csv` — 75,000 unlabeled products  
-- `sample_test_out.csv` — Submission format example  
+| File | Description |
+|------|-------------|
+| `train.csv` | 75,000 labeled samples |
+| `test.csv` | 75,000 unlabeled samples |
+| `sample_test_out.csv` | Submission format reference |
 
-### Output Format: In csv sample_id,price
-All predicted prices must be positive floating-point values.
+---
+
+## Output Format
+
+Predictions must be submitted as:
+
+    sample_id,price
+    100001,349.99
+    100002,1299.50
+
+- All prices must be **positive floating-point values**.
+
+---
 
 ## Methodology
 
-# Methodology
+### Overview
 
-- **Overview**
-  - A late-fusion multimodal learning pipeline combines textual and visual features.
-  - A single LightGBM regressor learns from the fused feature space to predict prices efficiently.
+We implement a **late-fusion multimodal pipeline** that independently extracts:
 
-- **Data Preprocessing**
-  - **Text Processing**
-    - Lowercasing
-    - Whitespace normalization
-  - **Image Processing**
-    - Parallel downloading with retry logic
-    - Cached locally at `/content/image_cache/`
-    - Missing or invalid images replaced with zero-vector embeddings
+- Semantic signals from text
+- Visual signals from images
 
-- **Feature Engineering**
-  - **Text Features**
-    - Extracted using TF-IDF:
-      - `TfidfVectorizer(`
-        - `ngram_range=(1, 2),`
-        - `min_df=3,`
-        - `max_features=150_000`
-      - `)`
-    - Captures unigrams and bigrams representing brands, attributes, and quantities.
-  - **Image Features**
-    - Pretrained EfficientNet-B0 used as a frozen feature extractor:
-      - `include_top=False`
-      - `pooling='avg'`
-      - `weights='imagenet'`
-    - Image size: 224 × 224
-    - Output: 1280-dimensional embedding
-    - Batch size: 64
+These representations are fused and learned by a **LightGBM regressor** for final price prediction.
 
-- **Feature Fusion**
-  - Text TF-IDF (sparse) and image embeddings (dense) concatenated using:
-    - `scipy.sparse.hstack`
+---
 
-- **Model Training**
-  - **Regressor**
-    - LightGBM (LGBMRegressor)
-  - **Objective**
-    - Mean Absolute Error (MAE)
-  - **Hyperparameters**
-    - `{`
-      - `"objective": "mae",`
-      - `"n_estimators": 5000,`
-      - `"learning_rate": 0.03,`
-      - `"num_leaves": 255,`
-      - `"subsample": 0.8,`
-      - `"colsample_bytree": 0.8,`
-      - `"reg_alpha": 0.2,`
-      - `"reg_lambda": 0.4,`
-      - `"random_state": 42`
-    - `}`
-  - **Training Setup**
-    - 85% training / 15% validation split
-    - Early stopping after 200 rounds
-    - Predictions clipped to >= 0.01
+## Data Preprocessing
 
-- **Model Architecture**
-  - `[text: catalog_content]`
-    - normalize
-    - TF-IDF (1–2 grams, 150k features)
-  - `[image: image_link]`
-    - download & cache
-    - EfficientNet-B0 (frozen, avg pooling)
-    - 1280-D embedding
-  - Concatenate
-  - LightGBM
-  - price
+### Text Processing
 
-- **Results**
-  - **Metric**
-    - Validation
-    - Test
-  - **MAE**
-    - 11.4555
-    - —
-  - **SMAPE (%)**
-    - 52.63
-    - 50.25
+- Lowercasing
+- Whitespace normalization
+- Removal of noisy formatting tokens
 
-- **Key Findings**
-  - Multimodal model outperforms text-only baselines
-  - Image embeddings add strong visual cues
-  - MAE objective provides stable SMAPE optimization
+### Image Processing
 
-- **Insights and Discussion**
-  - **Observations**
-    - TF-IDF captures brand and quantity signals effectively
-    - EfficientNet embeddings improve visual understanding
-    - LightGBM balances speed, accuracy, and interpretability
-    - Output clipping stabilizes SMAPE
-  - **Potential Improvements**
-    - Log-price regression for skewed targets
-    - TF-IDF ensemble vocabularies
-    - Add has_image feature
-    - Fine-tune CNN backbone
-    - Explore CLIP or Vision Transformers
+- Images downloaded using provided utility (`src/utils.py`)
+- Parallel downloading with retry handling
+- Cached locally
+- Missing images replaced with **zero embeddings** (no external lookup used)
 
-- **Implementation Details**
-  - **Language**
-    - Python 3.12
-  - **Environment**
-    - Google Colab
-  - **Frameworks**
-    - TensorFlow 2.17.1
-    - LightGBM 4.5.0
-    - scikit-learn 1.5.2
+---
 
-- **Paths**
-  - Dataset: `/content/drive/MyDrive/ARJUN/Exp/exp-28/dataset/`
-  - Cache: `/content/image_cache/`
-  - Output: `test_out.csv`
+## Feature Engineering
 
-- **Dependencies**
-  - `numpy==2.1.3`
-  - `pandas==2.2.3`
-  - `scipy==1.13.1`
-  - `scikit-learn==1.5.2`
-  - `lightgbm==4.5.0`
-  - `tensorflow==2.17.1`
-  - `Pillow==10.4.0`
-  - `tqdm>=4.67`
+### Text Features
 
-- **Licensing and Compliance**
-  - Model & Code License: MIT
-  - TensorFlow License: Apache 2.0
-  - LightGBM License: MIT
-  - Parameter Count: Under 8 billion
-  - External Data: None used
+Extracted using TF-IDF:
+```python
+TfidfVectorizer(
+    ngram_range=(1,2),
+    min_df=3,
+    max_features=150000
+)
+```
 
-- **Conclusion**
-  - This project demonstrates a robust and efficient multimodal regression framework for product price prediction.
-  - By combining TF-IDF text embeddings and EfficientNet-B0 image features within a LightGBM regressor, the model achieves approximately 50% SMAPE on unseen test data while maintaining:
-    - Lightweight architecture
-    - Strong generalization
-    - High interpretability
-    - Full reproducibility
+Captures:
+- Brand names
+- Quantities (IPQ)
+- Material/type descriptors
+- Pricing keywords (e.g., "premium", "pack of 12")
 
+### Image Features
+
+Extracted using pretrained **EfficientNet-B0** as a frozen encoder:
+
+- `weights = "imagenet"`
+- `include_top = False`
+- `pooling = "avg"`
+- Input size: **224 x 224**
+- Output: **1280-dimensional embedding**
+
+No fine-tuning performed to comply with compute and parameter constraints.
+
+---
+
+## Feature Fusion
+
+Text (sparse TF-IDF) and image (dense embeddings) are concatenated:
+```python
+scipy.sparse.hstack([text_features, image_features])
+```
+
+This produces a unified multimodal feature space.
+
+---
+
+## Model Training
+
+### Regressor
+
+**LightGBM (LGBMRegressor)** — chosen for:
+
+- Strong tabular learning capability
+- Ability to mix sparse + dense features
+- Fast training on large datasets
+- Stable optimization under SMAPE evaluation
+
+### Objective
+
+Model optimized using **MAE loss**, which empirically correlates well with SMAPE minimization.
+
+### Hyperparameters
+```python
+{
+    "objective": "mae",
+    "n_estimators": 5000,
+    "learning_rate": 0.03,
+    "num_leaves": 255,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.2,
+    "reg_lambda": 0.4,
+    "random_state": 42
+}
+```
+
+### Training Setup
+
+- 85% Train / 15% Validation split
+- Early stopping: 200 rounds
+- Predictions clipped to >= 0.01 (SMAPE stability)
+
+---
+
+## Model Architecture
+```
+[catalog_content]
+        |
+TF-IDF Vectorizer
+        |
+Sparse Text Features \
+                      --> Feature Concatenation --> LightGBM --> Price
+                     /
+  1280-D Embedding  /
+        |
+EfficientNet-B0 (frozen)
+        |
+  [product image]
+```
+
+---
+
+## Results
+
+| Metric | Validation |
+| ------ | ---------- |
+| MAE    | **11.46**  |
+| SMAPE  | **52.63%** |
+
+Public leaderboard SMAPE: **~50.25%**
+
+---
+
+## Key Findings
+
+- Multimodal fusion significantly outperforms text-only baselines.
+- Visual embeddings help capture:
+  - Perceived product quality
+  - Size/packaging cues
+  - Category differentiation
+- LightGBM effectively models nonlinear relationships between modalities.
+- Output clipping improves SMAPE robustness.
+
+---
+
+## Insights & Future Improvements
+
+Potential enhancements:
+
+- Log-price regression to address skewed distributions
+- CLIP / Vision-Language embeddings
+- CNN fine-tuning with small learning rate
+- Image availability indicator feature (`has_image`)
+- Category-aware models or stacking ensembles
+
+---
+
+## Implementation Details
+
+| Component   | Value                              |
+| ----------- | ---------------------------------- |
+| Language    | Python 3.12                        |
+| Environment | Google Colab                       |
+| Frameworks  | TensorFlow 2.17.1, LightGBM 4.5.0 |
+| Hardware    | GPU-accelerated feature extraction |
+
+---
+
+## Project Paths
+
+| Resource          | Path                                               |
+| ----------------- | -------------------------------------------------- |
+| Dataset           | `/content/drive/MyDrive/ARJUN/Exp/exp-28/dataset/` |
+| Image Cache       | `/content/image_cache/`                            |
+| Submission Output | `test_out.csv`                                     |
+
+---
+
+## Dependencies
+```
+numpy==2.1.3
+pandas==2.2.3
+scipy==1.13.1
+scikit-learn==1.5.2
+lightgbm==4.5.0
+tensorflow==2.17.1
+Pillow==10.4.0
+tqdm>=4.67
+```
+
+Install with:
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Reproducibility Steps
+
+**1. Place dataset inside:**
+```
+dataset/
+├── train.csv
+├── test.csv
+```
+
+**2. Download images:**
+```python
+from src.utils import download_images
+download_images("dataset/train.csv", "images/train")
+download_images("dataset/test.csv", "images/test")
+```
+
+**3. Train model and generate predictions.**
+
+**4. Export submission:**
+```
+test_out.csv
+```
+
+---
+
+## Licensing and Compliance
+
+- Code License: **MIT**
+- TensorFlow: **Apache 2.0**
+- LightGBM: **MIT**
+- Model size: **<< 8B parameters**
+- External data: **None used**
+- No external price lookup performed (competition compliant)
+
+This project strictly follows the challenge rule prohibiting:
+
+- Web scraping
+- External APIs
+- Manual lookup
+- Any external pricing source
+
+---
+
+## Summary
+
+This solution demonstrates an efficient and scalable **multimodal regression pipeline** that combines NLP and computer vision features for price prediction while remaining lightweight, reproducible, and competition-compliant.
+
+The approach balances:
+
+- Accuracy
+- Computational efficiency
+- Interpretability
+- Rule compliance
