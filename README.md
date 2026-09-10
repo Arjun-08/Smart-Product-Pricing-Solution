@@ -1,10 +1,5 @@
+# A multimodal machine learning pipeline that predicts e-commerce product prices using catalog text and product images.
 
-
-> A multimodal machine learning pipeline that predicts e-commerce product prices using catalog text and product images.
-
----
-
-## Problem Statement
 
 Determining the optimal price of a product is a critical task for e-commerce platforms. Product pricing depends on multiple factors including textual descriptions, specifications, quantity, and visual appearance. The objective of this project is to build a **multimodal machine learning model** that predicts product prices using:
 
